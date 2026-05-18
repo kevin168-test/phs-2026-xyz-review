@@ -4,6 +4,15 @@ let currentIndex = 0;
 let score = 0;
 let wrongAnswers = JSON.parse(localStorage.getItem('phs_wrong_answers') || '{}');
 
+// Helper to clean Markdown characters
+function cleanText(text) {
+    if (!text) return "";
+    return text.replace(/^>\s*/gm, '')      // Remove >
+               .replace(/^\s*[\*\-]\s*/gm, '') // Remove * or -
+               .replace(/\*\*/g, '')         // Remove **
+               .trim();
+}
+
 // Initialize
 async function init() {
     // Register Service Worker
@@ -54,27 +63,22 @@ function startQuiz(fileId) {
     
     let sampled = [];
     
-    // 1. Calculate how many from each category
     categories.forEach(cat => {
         const catQuestions = pool.filter(q => q.category === cat.name);
         const totalInCat = cat.end - cat.start + 1;
         const subjectTotal = pool.length;
         
-        // Proportional count
         let count = Math.round((totalInCat / subjectTotal) * targetSize);
-        if (count < 1 && totalInCat > 0) count = 1; // Ensure at least 1 if cat exists
+        if (count < 1 && totalInCat > 0) count = 1;
         
-        // Randomly pick from this category
         const shuffled = catQuestions.sort(() => 0.5 - Math.random());
         sampled = sampled.concat(shuffled.slice(0, count));
     });
 
-    // 2. Final adjustments (if rounding gave us != 20)
     sampled = sampled.sort(() => 0.5 - Math.random());
     if (sampled.length > targetSize) {
         sampled = sampled.slice(0, targetSize);
     } else if (sampled.length < targetSize) {
-        // Fill remaining with random from all
         const remaining = pool.filter(q => !sampled.includes(q));
         const extra = remaining.sort(() => 0.5 - Math.random()).slice(0, targetSize - sampled.length);
         sampled = sampled.concat(extra);
@@ -116,7 +120,6 @@ function showQuestion() {
     const q = currentQuiz[currentIndex];
     const container = document.getElementById('question-container');
     
-    // Update Progress
     const progress = ((currentIndex + 1) / currentQuiz.length) * 100;
     document.getElementById('progress-bar').style.width = `${progress}%`;
     document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${currentQuiz.length}`;
@@ -135,13 +138,17 @@ function showQuestion() {
             </div>
             <div id="feedback" class="feedback-area hidden">
                 <div class="hint-box">
-                    <strong>💡 一句話判斷：</strong><br>${q.hint}
+                    <strong>💡 一句話判斷：</strong><br>${cleanText(q.hint)}
                 </div>
                 <div class="expl-box">
                     <strong>📋 專業解析：</strong><br>
-                    <pre>${q.explanation}</pre>
+                    <div style="white-space: pre-wrap; margin-top:10px">${cleanText(q.explanation)}</div>
                     <br>
-                    <small style="color:#e67e22">${q.tags}</small>
+                    <div style="background:#f8f9fa; padding:10px; border-radius:8px; color:#e67e22; font-size:0.85rem">
+                        ${cleanText(q.warning)}<br>
+                        <hr style="border:0; border-top:1px solid #eee; margin:10px 0">
+                        ${q.tags}
+                    </div>
                 </div>
             </div>
         </div>
@@ -157,10 +164,9 @@ window.checkAnswer = function(choice) {
     const feedback = document.getElementById('feedback');
     
     let correct = q.answer;
-    // Handle edge cases like "一律給分" (#)
     if (correct === '#') {
         alert("本題考選部決議一律給分！");
-        correct = choice; // Treat user choice as correct
+        correct = choice;
     }
 
     btns.forEach(btn => {
@@ -176,8 +182,6 @@ window.checkAnswer = function(choice) {
 
     if (choice === correct) {
         score++;
-        // If it was in mistakes, maybe remove it? 
-        // For now, let's just keep it simple and only ADD to mistakes if wrong.
     } else {
         addToMistakes(q);
     }
@@ -192,7 +196,6 @@ window.checkAnswer = function(choice) {
 };
 
 function addToMistakes(q) {
-    // Extract fileId from q.id (stored as "filename_num")
     const parts = q.id.split('_');
     const fileId = parts.slice(0, -1).join('_');
     
